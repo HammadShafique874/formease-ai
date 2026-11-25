@@ -57,6 +57,24 @@ export default function Landing(): React.JSX.Element {
           </div>
         </section>
 
+        <section className="section" id="extension">
+          <h2>Get the Chrome Extension</h2>
+          <p className="muted" style={{ maxWidth: 720 }}>
+            Scan a form on the real page you are already on — the extension detects its fields and sends only the
+            minimum context to this dashboard. It never reads field values, never auto-fills, and never auto-submits.
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+            <a className="btn" href="/formease-extension.zip" download>Download the extension (.zip)</a>
+          </div>
+          <ol className="muted" style={{ marginTop: 16, lineHeight: 1.7 }}>
+            <li>Download and extract the ZIP above.</li>
+            <li>Open <code>chrome://extensions</code> in Chrome and turn on <strong>Developer mode</strong>.</li>
+            <li>Click <strong>Load unpacked</strong> and select the extracted folder.</li>
+            <li>Pin FormEase AI, open any form page, and click <strong>Scan this form</strong> in the popup.</li>
+          </ol>
+          <p className="small muted">The extension is also available as source in the GitHub repository. A Chrome Web Store listing is planned after the hackathon.</p>
+        </section>
+
         <section className="section">
           <h2>Main features</h2>
           <div className="grid grid-3" style={{ marginTop: 20 }}>

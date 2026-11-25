@@ -1,6 +1,7 @@
 // Single source of truth for the dashboard URL (extension side).
-// Phase 5: change this ONE constant to the hosted URL.
-export const DASHBOARD_BASE_URL = "http://localhost:5173";
+// Hosted URL (Firebase Hosting). The extension now sends scans to the live
+// dashboard; local dev can still open the dashboard directly in the browser.
+export const DASHBOARD_BASE_URL = "https://formease-ai-933b6.web.app";
 export const DASHBOARD_URL = `${DASHBOARD_BASE_URL}/#/dashboard`;
 export const WORKSPACE_URL = `${DASHBOARD_BASE_URL}/#/workspace`;
 export const SETTINGS_URL = `${DASHBOARD_BASE_URL}/#/settings`;

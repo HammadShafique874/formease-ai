@@ -27,6 +27,7 @@
     "storage"
   ],
   "host_permissions": [
+    "https://formease-ai-933b6.web.app/*",
     "http://localhost:5173/*"
   ]
 }

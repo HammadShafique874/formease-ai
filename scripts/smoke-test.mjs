@@ -8,7 +8,7 @@
 // block cloud fallback for PREFER_* modes (deviceInitFailureIsFatal is true
 // only for only_on_device), and cloud consent gates the cloud route.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -189,6 +189,25 @@ if (encoded) {
 }
 const huge = { ...scan, fields: Array.from({ length: 500 }, (_, i) => ({ id: `f-${i}`, label: `Field ${i} ${"x".repeat(100)}`, required: false, type: "text", isUpload: false })) };
 check("oversize scan refused for URL", encodeScanForUrl(huge) === null);
+
+// --- production bundle must not leak dev secrets ---
+// Vite embeds the whole import.meta.env object, so a production build that
+// loads the dev .env inlines the App Check debug token (see
+// apps/web/scripts/build.mjs). If the bundle exists, prove it is clean.
+{
+  const devEnv = join(root, "apps", "web", ".env");
+  const distAssets = join(root, "apps", "web", "dist", "assets");
+  if (existsSync(devEnv) && existsSync(distAssets)) {
+    const envText = readFileSync(devEnv, "utf8");
+    const secrets = [...envText.matchAll(/^VITE_APPCHECK_DEBUG_TOKEN=(.+)$/gm), ...envText.matchAll(/^VITE_APPCHECK_SITE_KEY=(.+)$/gm)]
+      .map((m) => (m[1] ?? "").trim()).filter((s) => s !== "");
+    const bundle = readdirSync(distAssets).filter((f) => f.endsWith(".js")).map((f) => readFileSync(join(distAssets, f), "utf8")).join("\n");
+    check("production bundle has no dev App Check secrets", secrets.every((s) => !bundle.includes(s)), `secrets checked: ${secrets.length}`);
+    check("production bundle has no localhost dashboard URL", !bundle.includes("localhost:5173"));
+  } else {
+    console.log("SMOKE: bundle leak check skipped (no .env or dist yet — run npm run build first)");
+  }
+}
 
 rmSync(outDir, { recursive: true, force: true });
 console.log(`SMOKE: ${passed} passed, ${failed} failed`);

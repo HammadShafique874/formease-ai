@@ -19,7 +19,7 @@ interface DetectedField {
   isUpload: boolean;
 }
 
-const DASHBOARD_BASE_URL = "http://localhost:5173";
+const DASHBOARD_BASE_URL = "https://formease-ai-933b6.web.app";
 const SCAN_STORAGE_PREFIX = "formease:scan:";
 const INCOMING_SCAN_KEY = "formease.incomingScan";
 const INCOMING_SCAN_EVENT = "formease:incoming-scan";
