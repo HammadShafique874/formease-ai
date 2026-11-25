@@ -83,7 +83,19 @@ not the default.
 
 ## Links
 
-- Demo video: _[add after recording — see `docs/demo-script.md`]_
-- GitHub repository: _[add after push — see `docs/deployment.md`]_
 - Hosted application: https://formease-ai-933b6.web.app
-  _[confirm after first deploy]_
+  (Firebase Hosting; deploy pending — see `docs/submission-checklist.md`)
+- Chrome Extension (installable ZIP, served from the hosted site):
+  https://formease-ai-933b6.web.app/formease-extension.zip
+  (Download → Extract → `chrome://extensions` → Developer mode → Load unpacked.
+  Also linked from the landing page's "Get the Chrome Extension" section.)
+- Demo video: _[add after recording — see `docs/demo-script.md`; must be ≤ 3 min,
+  public on YouTube, English or English subtitles, showing the app functioning]_
+- GitHub repository: _[add after push — see `docs/deployment.md` §6; must be
+  public, Apache 2.0 LICENSE at the top level]_
+
+## Submission checklist
+
+Full step-by-step list, including what is already done: see
+`docs/submission-checklist.md`. Deadline: **30 Nov 2026, 5:00 PM ET**
+(1 Dec, 3:00 AM PKT). Platform to select on Devpost: **Web (Chrome)**.
