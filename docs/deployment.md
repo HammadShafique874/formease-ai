@@ -90,3 +90,22 @@ npx firebase hosting:rollback --site formease-ai-933b6
 ```
 
 Or redeploy the previous build with `npm run deploy`.
+
+## 6. Publish the code to GitHub
+
+The local git repo is already initialised and committed (branch `main`,
+78 files, no `.env` — verified). Create the remote in your GitHub
+account, then push from the project root:
+
+```bash
+# 1. On github.com, create a new PUBLIC repository named e.g. formease-ai
+#    (do NOT initialise it with a README — the repo already has one).
+# 2. Then, on your machine:
+git remote add origin https://github.com/<your-username>/formease-ai.git
+git push -u origin main
+```
+
+After pushing, fill in the GitHub link in `docs/devpost.md` and in the
+README header. If GitHub ever shows a secret-scanning warning, check
+that it is only the `.env.example` placeholders — the real `.env` was
+never committed (`git ls-files | grep "\.env$"` returns nothing).
