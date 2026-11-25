@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FormEase AI</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="popup-head">
+      <span class="logo-mark">F</span>
+      <div><strong>FormEase AI</strong><div class="muted" id="page-info">Loading page…</div></div>
+    </header>
+    <main>
+      <button type="button" id="scan" class="btn">Scan Current Form</button>
+      <p id="status" class="muted" role="status">No scan yet.</p>
+      <div id="summary" class="summary" role="status"></div>
+      <div id="fields"></div>
+      <div class="row">
+        <button type="button" id="send-dashboard" class="btn" disabled>Send to Dashboard</button>
+        <button type="button" id="copy-scan" class="btn btn-secondary" disabled>Copy scan JSON</button>
+      </div>
+      <label class="field-label" for="lang">Explanation language</label>
+      <select id="lang" class="select">
+        <option value="en">English</option>
+        <option value="simple-en">Simple English</option>
+        <option value="roman-ur">Roman Urdu</option>
+      </select>
+      <p class="muted small">AI explanations run in the web dashboard — the extension only detects fields. No Firebase code runs here. “Send to Dashboard” stores the scan in the browser and opens the workspace; for small scans it can also travel in the URL if storage is unavailable.</p>
+      <div class="row">
+        <button type="button" id="open-dashboard" class="btn">Open Full Dashboard</button>
+        <button type="button" id="settings" class="btn btn-secondary">Settings</button>
+      </div>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

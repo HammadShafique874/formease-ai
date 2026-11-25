@@ -1,0 +1,26 @@
+{
+  "name": "formease",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "FormEase AI \u2014 every form, finally understandable. BuildHybridAI 2026.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@formease/web",
+    "build": "npm run build --workspace=@formease/shared && npm run build --workspace=@formease/web && npm run build --workspace=@formease/extension",
+    "typecheck": "npm run typecheck --workspace=@formease/shared && npm run typecheck --workspace=@formease/web && npm run typecheck --workspace=@formease/extension",
+    "test": "node scripts/smoke-test.mjs && node scripts/ai-fallback-test.mjs",
+    "lint": "eslint .",
+    "preview": "npm run preview --workspace=@formease/web",
+    "deploy": "npm run build && firebase deploy --only hosting"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "eslint": "10.15.0",
+    "firebase-tools": "^15.37.0",
+    "typescript-eslint": "8.74.0"
+  }
+}
