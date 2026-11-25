@@ -13,7 +13,7 @@
 // do not hard-code a Gemini model name here without verifying it in the typings.
 // Never set topK / presencePenalty / frequencyPenalty — deprecated, they fail on Gemini 3.x.
 import type { FieldExplanation, FormGuide, HybridResult, InferenceModePreference, InferenceRoute, Language, PerFieldAIResult } from "@formease/shared";
-import { dedupKey, deviceInitFailureIsFatal, deviceInitRequired, isLocalFailure, isTransientError, overallRoute, parseFieldExplanationJson, planFallbackStages, routeFromInferenceSource, shouldFallbackToCloud } from "@formease/shared";
+import { dedupKey, deviceInitFailureIsFatal, deviceInitRequired, isLocalFailure, isTransientError, overallRoute, parseFieldExplanationJson, planFallbackStages, routeFromInferenceSource, shouldFallbackToCloud, summarizeAiError } from "@formease/shared";
 import type { GenerativeModel } from "firebase/ai";
 import { firebaseConfig, isFirebaseConfigured } from "../firebase/config.ts";
 import { getAppCheckStatus, initAppCheck } from "../firebase/appCheck.ts";
@@ -64,7 +64,8 @@ const FIELD_PROMPT = (label: string, context: string, language: string): string 
   `{"fieldLabel": "...", "simpleExplanation": "...", "explanations": {"en": "...", "simple-en": "...", "roman-ur": "..."}, "requiredInformation": ["..."], "possibleDocuments": ["..."], "commonMistakes": ["..."], "exampleAnswer": "...", "confidence": 0.9}. ` +
   `Rules: preserve the meaning of the original question; never invent official requirements; ` +
   `if a document is only possibly needed, say so in possibleDocuments, do not claim it is mandatory. ` +
-  `Language for simpleExplanation: ${language}. Also provide "explanations" with the same explanation in all three languages, so the guide can show every language without another AI call: "en" (English), "simple-en" (Simple English, short plain words), "roman-ur" (Roman Urdu, written in Latin letters). Field: "${label}". Context: "${context}".`;
+  `If the field label looks garbled, fragmented, or unreadable (for example OCR noise such as random letters, brackets, or broken words), say so plainly in simpleExplanation — for example "This field label is unclear in the form, so I can't explain it reliably" — and set confidence low. Never invent a meaning for a label you cannot read. ` +
+  `Language for simpleExplanation: ${language}. Also provide "explanations" with the same explanation in all three languages, so the guide can show every language without another AI call: "en" (English), "simple-en" (Simple English, short plain words), "roman-ur" (Roman Urdu written ONLY in Latin letters — never use Urdu/Arabic script or Devanagari characters). Field: "${label}". Context: "${context}".`;
 
 function readCloudConsent(): boolean {
   try {
@@ -305,6 +306,7 @@ export class FirebaseHybridService implements HybridAIService {
     const run = (async (): Promise<HybridResult<FieldExplanation>> => {
       let attemptsTotal = 0;
       let lastError = "AI request failed";
+      let earlierStageFailed = false;
       for (const stage of plan.stages) {
         const r = await this.attemptField(req, stage, opts, started);
         attemptsTotal += r.attempts ?? 1;
@@ -319,14 +321,23 @@ export class FirebaseHybridService implements HybridAIService {
             modelInfo: "Firebase AI Logic (hybrid)",
             attempts: attemptsTotal,
             needsCloudConsent: true,
-            error: `${lastError} Enable cloud fallback to use Firebase Cloud AI instead — your form text will be sent to the cloud only with your consent (Settings → Privacy).`,
+            // The UI shows this string in the run summary, so it must be
+            // short and plain — never the raw error dump.
+            error: `${summarizeAiError(lastError).summary} Enable cloud fallback to use Firebase Cloud AI instead — your form text will be sent to the cloud only with your consent (Settings → Privacy).`,
           };
         }
         // A failure the other route cannot fix (bad output, App Check, auth,
         // quota, cancelled) ends the run — do not burn a cloud call on it.
+        // When an earlier stage already failed, say both failed, so the
+        // error reads the same as the end-of-loop case below.
         if (!shouldFallbackToCloud(r.error)) {
-          return { ...r, attempts: attemptsTotal };
+          return {
+            ...r,
+            attempts: attemptsTotal,
+            error: earlierStageFailed ? `On-device AI and cloud AI both failed. Last error: ${r.error ?? lastError}` : r.error,
+          };
         }
+        earlierStageFailed = true;
         // Otherwise fall through to the next stage automatically.
       }
       return {
@@ -405,7 +416,17 @@ export class FirebaseHybridService implements HybridAIService {
     const failed = results.filter((r) => r.error !== undefined);
     const route = overallRoute(succeeded.map((r) => r.route));
     const errorParts: string[] = [];
-    if (failed.length > 0) errorParts.push(`${String(failed.length)} of ${String(results.length)} field(s) failed: ${failed.map((f) => `${f.fieldLabel} (${f.error ?? "unknown error"})`).join("; ")}`);
+    // The aggregated error is shown in the run summary and the failure
+    // banner, so it must be one short plain-language line: labels plus the
+    // friendly reason from the first failure. The raw dumps stay in the
+    // per-field `error` values for the collapsed technical details.
+    if (failed.length > 0) {
+      const bothFailed = failed.some((f) => (f.error ?? "").includes("both failed"));
+      const firstSummary = summarizeAiError(failed[0]?.error ?? "").summary;
+      errorParts.push(
+        `${String(failed.length)} of ${String(results.length)} field(s) failed: ${failed.map((f) => f.fieldLabel).join(", ")}. ${bothFailed ? "On-device AI and cloud AI both failed. " : ""}${firstSummary}`,
+      );
+    }
     if (stoppedReason) errorParts.push(stoppedReason);
     return {
       route,

@@ -214,6 +214,28 @@ export function initAppCheck(_app: unknown): void {}
     check("H2: form run -> cloud route", r.route === "cloud", `route=${r.route} error=${r.error ?? ""}`);
     check("H2: both fields explained by cloud", (r.data ?? []).length === 2, `data=${(r.data ?? []).length}`);
   }
+  // J. One field fails with a real quota dump -> the aggregated error is one
+  // short plain-language line, never the raw Firebase dump (URLs + JSON).
+  {
+    const quotaDump = "AI: Error fetching from https://firebasevertexai.googleapis.com/v1beta/projects/formease-ai-933b6/models/gemini-3.5-flash-lite:generateContent: [429 ] You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://aistudio.google.com/docs/rate-limits. * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite. Please retry in 33.481147255s. [{\"@type\":\"type.googleapis.com/google.rpc.Help\"}] (AI/fetch-error)";
+    let cloudCalls = 0;
+    const createModel = async () => ({
+      initializeDeviceModel: async () => { throw new Error("Local LanguageModel API not available in this environment. (AI/api-not-enabled)"); },
+      generateContent: async () => {
+        cloudCalls += 1;
+        if (cloudCalls === 2) throw new Error(quotaDump);
+        return { response: { inferenceSource: "in_cloud", text: () => validJson("Full name") } };
+      },
+    });
+    const svc = new FirebaseHybridService({ getCloudConsent: () => true, createModel });
+    const r = await svc.explainForm(guide(["Full name", "Email address"]), "prefer_on_device");
+    check("J: one field succeeded by cloud", (r.data ?? []).length === 1, `data=${(r.data ?? []).length} error=${r.error ?? ""}`);
+    check("J: aggregated error is short and plain", (r.error ?? "").length < 300, r.error ?? "");
+    check("J: aggregated error has no raw URL or JSON", !(r.error ?? "").includes("googleapis.com") && !(r.error ?? "").includes("{"), r.error ?? "");
+    check("J: aggregated error says both failed", (r.error ?? "").includes("both failed"), r.error ?? "");
+    check("J: aggregated error gives the quota reason", (r.error ?? "").includes("hit its limit"), r.error ?? "");
+    check("J: aggregated error names the failed field", (r.error ?? "").includes("Email address"), r.error ?? "");
+  }
 } catch (e) {
   failed += 1;
   console.error("TEST HARNESS ERROR:", e?.message ?? e);

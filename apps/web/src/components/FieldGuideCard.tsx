@@ -4,6 +4,7 @@ import { fieldExplanationInLanguage, fieldSourceLabel, sourceLabel } from "@form
 import { Badge } from "./Badge.tsx";
 import { Button } from "./Button.tsx";
 import { Card } from "./Card.tsx";
+import { FriendlyError } from "./FriendlyError.tsx";
 import { InferenceBadge } from "./InferenceBadge.tsx";
 import { languageLabel } from "./LanguageSelector.tsx";
 
@@ -35,9 +36,10 @@ export function FieldGuideCard({ field, guideLanguage, defaultLanguage, showMist
         </span>
       </div>
       {field.aiError && (
-        <p className="small" style={{ color: "#dc5b64", marginTop: 8 }}>
-          AI failed for this field: {field.aiError} — the explanation below is from the phrasebook/parser, not AI.
-        </p>
+        <div className="small" style={{ color: "#dc5b64", marginTop: 8 }}>
+          <FriendlyError raw={field.aiError} />
+          <p style={{ margin: "6px 0 0" }}>The explanation below is from the phrasebook/parser, not AI.</p>
+        </div>
       )}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }} role="tablist" aria-label="Explanation language">
         {LANGS.map((lang) => (

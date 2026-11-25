@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import type { ExtensionScan, FormGuide, InferenceModePreference, Language } from "@formease/shared";
-import { buildGuideFromText, decodeScanFromUrl, detectDocumentHints, isValidExtensionScan, parseFormFields } from "@formease/shared";
+import { buildGuideFromText, decodeScanFromUrl, detectDocumentHints, isValidExtensionScan, parseFormFields, summarizeAiError } from "@formease/shared";
 import { getHashParam } from "../App.tsx";
 import { Button } from "../components/Button.tsx";
 import { Card } from "../components/Card.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { FieldGuideCard } from "../components/FieldGuideCard.tsx";
+import { FriendlyError } from "../components/FriendlyError.tsx";
 import { InferenceBadge } from "../components/InferenceBadge.tsx";
 import { Input, Textarea } from "../components/Input.tsx";
 import { LanguageSelector } from "../components/LanguageSelector.tsx";
@@ -45,6 +46,7 @@ export default function Workspace(): React.JSX.Element {
   const [fileInfo, setFileInfo] = useState("");
   const [fileError, setFileError] = useState("");
   const [notice, setNotice] = useState("");
+  const [aiNotice, setAiNotice] = useState(""); // AI failure when some fields still succeeded (friendly banner with retry)
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ExtractionProgress | null>(null);
@@ -73,13 +75,17 @@ export default function Workspace(): React.JSX.Element {
   // Runs real AI guidance for every field of `target` and merges the results
   // into the displayed guide. Takes the guide as a parameter so Analyse and
   // extension-scan import can auto-run it with the freshly built guide
-  // (state is not updated yet at that point).
-  const getAiExplanations = (target: FormGuide) => {
+  // (state is not updated yet at that point). `mergeInto` is the guide the
+  // results merge back into — for a retry it is the full guide, while
+  // `target` holds only the failed fields, so a retry never loses the
+  // fields that already succeeded.
+  const getAiExplanations = (target: FormGuide, mergeInto: FormGuide = target) => {
     // Stop any previous run (it belonged to a previous guide). Its
     // completion handlers ignore themselves via the run token below.
     aiControllerRef.current?.abort();
     const runToken = (aiRunTokenRef.current += 1);
     setAiError("");
+    setAiNotice("");
     setAiNeedsConsent(false);
     setAiRunning(true);
     setAiDone(false);
@@ -98,22 +104,26 @@ export default function Workspace(): React.JSX.Element {
       setAiProgress(null);
       const failedByLabel = new Map((result.results ?? []).filter((r) => r.error).map((r) => [r.fieldLabel, r.error as string]));
       const aiByLabel = new Map((result.data ?? []).map((f) => [f.fieldLabel, f]));
-      const mergedFields = target.fields.map((f) => {
+      const mergedFields = mergeInto.fields.map((f) => {
         const ai = aiByLabel.get(f.fieldLabel);
         if (ai) return ai;
         const err = failedByLabel.get(f.fieldLabel);
+        // A field that failed in this run keeps its old aiError only when
+        // this run attempted it; a field that succeeded before and was not
+        // retried keeps its successful explanation (aiError already absent).
         return err ? { ...f, aiError: err } : f;
       });
       const succeeded = result.data?.length ?? 0;
+      const succeededTotal = mergedFields.filter((f) => f.source === "ai").length;
       const noteParts = [
-        succeeded > 0
-          ? `${String(succeeded)} of ${String(target.detectedLabels.length)} field(s) explained by real AI (${result.route === "local" ? "on-device" : result.route === "cloud" ? "cloud" : result.route === "mixed" ? "mixed on-device + cloud" : "route not reported"}) in ${(result.latencyMs / 1000).toFixed(1)}s.`
+        succeededTotal > 0
+          ? `${String(succeededTotal)} of ${String(mergeInto.detectedLabels.length)} field(s) explained by real AI (${result.route === "local" ? "on-device" : result.route === "cloud" ? "cloud" : result.route === "mixed" ? "mixed on-device + cloud" : "route not reported"}) in ${(result.latencyMs / 1000).toFixed(1)}s.`
           : "No field received an AI explanation.",
         failedByLabel.size > 0 ? `Failed fields kept their phrasebook/parser explanation: ${[...failedByLabel.keys()].join(", ")}.` : "",
         result.error ?? "",
       ].filter((s) => s !== "");
       const merged: FormGuide = {
-        ...target,
+        ...mergeInto,
         fields: mergedFields,
         inferenceRoute: result.route,
         inferenceNote: noteParts.join(" "),
@@ -123,7 +133,7 @@ export default function Workspace(): React.JSX.Element {
       setAiDone(true);
       setAiNeedsConsent(result.needsCloudConsent === true);
       if (result.error && succeeded === 0) setAiError(result.error);
-      else if (result.error) setNotice(result.error);
+      else if (result.error) setAiNotice(result.error);
       if (saveHistory) {
         const { error: saveError } = upsertGuide(merged);
         if (saveError) setError(saveError);
@@ -136,6 +146,17 @@ export default function Workspace(): React.JSX.Element {
       setAiProgress(null);
       setAiError(err instanceof Error ? err.message : "AI explanations failed.");
     });
+  };
+
+  // Re-runs AI for only the fields that failed (quota and overload errors
+  // are transient — a retry a minute later usually succeeds), without
+  // re-running the fields that already have a real AI explanation.
+  const retryFailedFields = () => {
+    if (!guide || aiRunning) return;
+    const failedFields = guide.fields.filter((f) => f.aiError);
+    if (failedFields.length === 0) return;
+    const retryGuide: FormGuide = { ...guide, fields: failedFields, detectedLabels: failedFields.map((f) => f.fieldLabel) };
+    getAiExplanations(retryGuide, guide);
   };
 
   // One click = the complete guide. Analyse detects the fields, then AI
@@ -253,7 +274,7 @@ export default function Workspace(): React.JSX.Element {
     // overwrite the new one (its completion handlers also ignore themselves
     // via the run token).
     aiControllerRef.current?.abort();
-    setError(""); setNotice(""); setGuide(null); setAiDone(false); setAiError(""); setAiNeedsConsent(false); setAiProgress(null);
+    setError(""); setNotice(""); setAiNotice(""); setGuide(null); setAiDone(false); setAiError(""); setAiNeedsConsent(false); setAiProgress(null);
     if (url.trim() !== "") {
       setNotice("FormEase cannot fetch arbitrary websites directly — browsers block cross-site reads (CORS). Your URL was not fetched. Paste the form text above, or upload the form document, instead.");
     }
@@ -299,7 +320,7 @@ export default function Workspace(): React.JSX.Element {
   return (
     <div className="container page">
       <h1>Form Analysis Workspace</h1>
-      <p className="muted">Paste form text, enter a URL, or upload a PDF/image. Choose a language, then click <strong>Analyse form</strong>. FormEase detects the fields and generates the complete guide for every field in one place — explanation in English, Simple English and Roman Urdu, required information, an example, possible documents and common mistakes. AI guidance runs automatically after analysis when Firebase is configured (you can turn that off in Settings). Until AI guidance has run, the guide below is clearly marked provisional — it is not the final guide. Nothing is ever presented as AI unless a real AI call produced it.</p>
+      <p className="muted">Paste form text, upload a PDF/image, or scan with the extension, then click <strong>Analyse form</strong> — FormEase detects the fields and generates the complete guide for every field in one place, in English, Simple English and Roman Urdu.</p>
       {scanBanner && (
         <div className="banner" role="status" style={{ marginTop: 16 }}>
           <span>{scanBanner}</span>
@@ -362,7 +383,7 @@ export default function Workspace(): React.JSX.Element {
               <Card>
                 <h2 style={{ fontSize: "1.2rem" }}>Your complete guide</h2>
                 <p className="muted" style={{ marginTop: 4 }}>{guide.title} · {guide.detectedLabels.length} fields detected locally · {guide.fields.filter((f) => f.source === "phrasebook").length} from the phrasebook, {guide.fields.filter((f) => f.source === "parser").length} from the local parser, {guide.fields.filter((f) => f.source === "ai").length} from real AI.</p>
-                <InferenceBadge route={guide.inferenceRoute} reason={!isFirebaseConfigured ? "Firebase not configured — add your config to apps/web/.env" : guide.fields.find((f) => f.aiError)?.aiError} />
+                <InferenceBadge route={guide.inferenceRoute} reason={!isFirebaseConfigured ? "Firebase not configured — add your config to apps/web/.env" : summarizeAiError(guide.fields.find((f) => f.aiError)?.aiError).summary} />
                 {aiRunning && aiProgress && (
                   <div style={{ marginTop: 12 }}>
                     <p style={{ margin: 0 }}><strong>Step 2 of 2 — Generating AI guidance…</strong></p>
@@ -389,7 +410,8 @@ export default function Workspace(): React.JSX.Element {
                 {!aiRunning && aiDone && (
                   <p className="small" style={{ marginTop: 12 }}>{guide.inferenceNote}</p>
                 )}
-                {aiError && <div className="notice notice-error" style={{ marginTop: 12 }}>{aiError}</div>}
+                {aiError && <div className="notice notice-error" style={{ marginTop: 12 }}><FriendlyError raw={aiError} onRetry={guide.fields.some((f) => f.aiError) ? retryFailedFields : undefined} retryLabel={`Retry failed fields (${String(guide.fields.filter((f) => f.aiError).length)})`} /></div>}
+                {aiNotice && <div className="notice notice-error" style={{ marginTop: 12 }}><FriendlyError raw={aiNotice} onRetry={guide.fields.some((f) => f.aiError) ? retryFailedFields : undefined} retryLabel={`Retry failed fields (${String(guide.fields.filter((f) => f.aiError).length)})`} /></div>}
                 {aiNeedsConsent && (
                   <div className="notice" style={{ marginTop: 12 }}>
                     <strong>On-device AI isn’t available in this browser.</strong> To explain this form with Firebase Cloud AI, enable cloud fallback — your form text will be sent to Google’s cloud AI. You can turn this off anytime in Settings → Privacy.

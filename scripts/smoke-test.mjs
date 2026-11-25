@@ -46,7 +46,7 @@ const transfer = await imp("transfer.js");
 
 const {
   dedupKey, deviceInitFailureIsFatal, deviceInitRequired, isLocalFailure, isTransientError,
-  overallRoute, planFallbackStages, resolveEffectiveMode, routeFromInferenceSource, shouldFallbackToCloud,
+  overallRoute, planFallbackStages, resolveEffectiveMode, routeFromInferenceSource, shouldFallbackToCloud, summarizeAiError,
 } = hybrid;
 const { parseFieldExplanationJson, validateFieldExplanation } = schemas;
 const { formatLatency, guessFieldType, parseFormFields, slugify } = utils;
@@ -164,6 +164,20 @@ check("guide has 2 fields", guide.fields.length === 2 && guide.detectedLabels.le
 check("new guide route is unavailable (no AI run yet)", guide.inferenceRoute === "unavailable");
 check("slugify", slugify("Full Name!") === "full-name");
 check("formatLatency", formatLatency(1500) === "1.5 s");
+
+// --- friendly AI errors (summarizeAiError) ---
+// Raw AI errors are long Firebase dumps (URLs + JSON). The UI must show one
+// short plain-language sentence, never the dump.
+const quotaRaw = "AI: Error fetching from https://firebasevertexai.googleapis.com/v1beta/projects/formease-ai-933b6/models/gemini-3.5-flash-lite:generateContent: [429 ] You exceeded your current quota. * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15. Please retry in 33.481147255s. [{\"@type\":\"type.googleapis.com/google.rpc.Help\"}] (AI/fetch-error)";
+const quota = summarizeAiError(quotaRaw);
+check("friendly error: quota says limit + wait time", quota.summary.includes("hit its limit") && quota.summary.includes("34 seconds"), quota.summary);
+check("friendly error: quota retry seconds parsed", quota.retrySeconds === 34, String(quota.retrySeconds));
+check("friendly error: quota keeps raw detail", quota.detail === quotaRaw);
+check("friendly error: 500 high demand says busy", summarizeAiError("AI: Error fetching from https://firebasevertexai.googleapis.com/v1beta/projects/x/models/gemini-3.5-flash-lite:generateContent: [500 ] This model is currently experiencing high demand. (AI/fetch-error)").summary.includes("busy right now"));
+check("friendly error: api-not-enabled says on-device unavailable", summarizeAiError("Local LanguageModel API not available in this environment. (AI/api-not-enabled)").summary.includes("On-device AI isn't available"));
+check("friendly error: App Check says security check", summarizeAiError("AI: App Check token is invalid (AI/app-check)").summary.includes("security check failed"));
+check("friendly error: empty error is generic", summarizeAiError("").summary.includes("couldn't complete"));
+check("friendly error: unknown error is generic but detail kept", summarizeAiError("Something odd happened").summary.includes("couldn't complete") && summarizeAiError("Something odd happened").detail === "Something odd happened");
 
 // --- extension transfer ---
 const scan = { id: "scan-1", url: "https://example.edu/apply", title: "Apply", scannedAt: new Date().toISOString(), language: "en", fields: [{ id: "f-1", label: "Full name", required: true, type: "text", isUpload: false }] };

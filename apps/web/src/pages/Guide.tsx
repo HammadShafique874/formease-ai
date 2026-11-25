@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Language } from "@formease/shared";
+import { summarizeAiError } from "@formease/shared";
 import { Badge } from "../components/Badge.tsx";
 import { Button } from "../components/Button.tsx";
 import { Card } from "../components/Card.tsx";
@@ -42,7 +43,7 @@ export default function Guide(): React.JSX.Element {
       <h1>{guide.title}</h1>
       <p className="muted">Source: {guide.sourceLabel} · Saved {new Date(guide.createdAt).toLocaleString()}</p>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <InferenceBadge route={guide.inferenceRoute} reason={guide.fields.find((f) => f.aiError)?.aiError} />
+        <InferenceBadge route={guide.inferenceRoute} reason={summarizeAiError(guide.fields.find((f) => f.aiError)?.aiError).summary} />
         <Badge>{guide.source}</Badge>
         <span className="badge">Showing: {languageLabel(language)}</span>
         <span className="badge">{guide.fields.filter((f) => f.source === "ai").length} AI · {guide.fields.filter((f) => f.source === "phrasebook").length} phrasebook · {guide.fields.filter((f) => f.source === "parser").length} parser</span>

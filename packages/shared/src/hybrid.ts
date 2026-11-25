@@ -133,3 +133,57 @@ export function shouldFallbackToCloud(error: string | undefined): boolean {
   if (/validation|schema|invalid|json|app check|appcheck|permission|forbidden|401|403|api key|quota|user activation|user gesture|cancel|abort/.test(msg)) return false;
   return true;
 }
+
+export interface AiErrorSummary {
+  /** One short plain-language sentence the user can act on. */
+  summary: string;
+  /** Seconds to wait before retrying, when the error says so (quota). */
+  retrySeconds: number | null;
+  /** The raw error, kept for the collapsed "technical details" view. */
+  detail: string;
+}
+
+/**
+ * Turns a raw AI error (often a long Firebase/HTTP dump with URLs and a
+ * JSON blob) into one short plain-language sentence. The raw text is kept
+ * as `detail` for debugging, but the UI must show `summary` — never the
+ * raw dump — or users see a wall of JSON they cannot act on.
+ */
+export function summarizeAiError(raw: string | undefined | null): AiErrorSummary {
+  const detail = (raw ?? "").trim();
+  if (detail === "") {
+    return { summary: "The AI service couldn't complete this field. Please try again.", retrySeconds: null, detail };
+  }
+  // Retry delay when the error states one ("Please retry in 33.48s", "retryDelay":"33s").
+  let retrySeconds: number | null = null;
+  const retryMatch = detail.match(/retry (?:in )?(\d+(?:\.\d+)?)\s*s/i) ?? detail.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)\s*s?"/i);
+  if (retryMatch) retrySeconds = Math.ceil(Number(retryMatch[1]));
+  if (/429|quota|rate.?limit|too many requests/i.test(detail)) {
+    return {
+      summary: retrySeconds !== null
+        ? `The free AI service hit its limit (too many requests in a minute). Please wait about ${String(retrySeconds)} seconds, then try again.`
+        : "The free AI service hit its limit (too many requests in a minute). Please wait about a minute, then try again.",
+      retrySeconds,
+      detail,
+    };
+  }
+  if (/500|high demand|overloaded|service unavailable|temporarily unavailable/i.test(detail)) {
+    return { summary: "The AI service is busy right now. Please try again in a moment.", retrySeconds, detail };
+  }
+  if (/api-not-enabled|not available in this environment|language ?model api|prompt api/i.test(detail)) {
+    return { summary: "On-device AI isn't available in this browser.", retrySeconds: null, detail };
+  }
+  if (/app check/i.test(detail)) {
+    return { summary: "A security check failed (App Check). Check the Firebase setup and try again.", retrySeconds: null, detail };
+  }
+  if (/cancel|abort/i.test(detail)) {
+    return { summary: "The AI run was cancelled.", retrySeconds: null, detail };
+  }
+  if (/network|failed to fetch|fetch failed|offline|timeout|timed out/i.test(detail)) {
+    return { summary: "The AI service couldn't be reached. Check your connection and try again.", retrySeconds, detail };
+  }
+  if (/firebase not configured/i.test(detail)) {
+    return { summary: "AI isn't available — Firebase is not configured.", retrySeconds: null, detail };
+  }
+  return { summary: "The AI service couldn't complete this field. Please try again.", retrySeconds, detail };
+}
