@@ -72,3 +72,6 @@ Full steps: `docs/firebase-setup.md`. Summary:
 - `apps/extension/` — Manifest V3, TypeScript, no framework, no Firebase.
 
 License: Apache License 2.0 — see `LICENSE`.
+## Live On:
+https://formease-ai-933b6.web.app
+
