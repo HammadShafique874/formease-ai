@@ -91,8 +91,8 @@ not the default.
   Also linked from the landing page's "Get the Chrome Extension" section.)
 - Demo video: _[add after recording — see `docs/demo-script.md`; must be ≤ 3 min,
   public on YouTube, English or English subtitles, showing the app functioning]_
-- GitHub repository: _[add after push — see `docs/deployment.md` §6; must be
-  public, Apache 2.0 LICENSE at the top level]_
+- GitHub repository: https://github.com/HammadShafique874/formease-ai
+  (public, Apache 2.0 LICENSE at the top level)
 
 ## Submission checklist
 
